@@ -128,10 +128,11 @@ async def on_message(message):
     else:
         if agent.inspect(message.content) == "harmful":
             alert = f'`{message.author} a dis {message.content}`'
-            user = get_user(str(message.author))
-            if flagged(user):
-                previous_messages = get_messages(user)
+            user = str(get_user(str(message.author)))
+            if flagged(user) is True:
+                previous_messages = get_messages(str(message.author))
                 blame = f"Has already been warned {len(previous_messages)} times" if len(previous_messages) > 1 else ""
+                print(previous_messages, blame)
                 moderation = agent.moderate(message.content + "already been warned for" + str(previous_messages) + blame)
             else:
                 flag(user)
@@ -150,6 +151,10 @@ async def on_member_join(member):
 def run_bot():
     client.run(TOKEN)
     return "Bot is running"
+
+def thread_bot():
+    bot = Thread(target=run_bot, daemon=True)
+    bot.start()
 
 
 ##############DATABASE###########
@@ -170,28 +175,40 @@ def get_post(post_id):
 
 def get_messages(username):
     conn = get_db_connection()
-    message = conn.execute("SELECT message FROM posts WHERE username = ?", (username,)).fetchall()
+    cursor = conn.execute("SELECT message FROM posts WHERE author = ? ORDER BY created DESC", (username,))
+    messages = [row[0] for row in cursor.fetchall()]
     conn.close()
-    return message
+    return messages
 
 def get_user(username):
     conn = get_db_connection()
-    user = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    cursor = conn.execute("SELECT id FROM users WHERE username = ?", (username,))
+    user = cursor.fetchone()
     if user is None:
         conn.execute("INSERT INTO users (username) VALUES (?)", (username,))
-        user = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        cursor = conn.execute("SELECT id FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
     conn.commit()  
     conn.close()
-    return user
+    if user is not None:
+        user_id = user[0]
+
+    return user_id
 
 def flagged(user_id):
     conn = get_db_connection()
-    flagged = conn.execute("SELECT is_warned FROM users WHERE id = ?", (user_id,)).fetchone()
+    cursor = conn.execute("SELECT is_warned FROM users WHERE id = ?", (user_id,))
+    result = cursor.fetchone()
     conn.close()
-    return True if flagged == "TRUE" else False
+    if result is None:
+        return None
+    is_warned = result[0]
+    print(is_warned)
+    return True if is_warned == 1 else False
+
 def flag(user_id):
     conn = get_db_connection()
-    conn.execute("UPDATE users SET is_warned=TRUE WHERE id = ?", (user_id,))
+    conn.execute("UPDATE users SET is_warned=1 WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
     return "User flagged"
@@ -218,8 +235,7 @@ def index():
 
 @app.route('/run', methods=['POST'])
 def run():
-    bot = Thread(target=run_bot, daemon=True)
-    bot.start()
+    thread_bot()
     return redirect(url_for('index'))
 
 
@@ -270,4 +286,5 @@ def delete(id):
     return redirect(url_for('index'))
 
 if __name__ == "__main__":
+    thread_bot()
     app.run()  
