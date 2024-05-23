@@ -33,7 +33,7 @@ Initialize the SQLite database by running the schema.sql script.
 
 Usage
 Start the Flask application:
-python app.py
+python project.py
 
 
 
