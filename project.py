@@ -1,3 +1,4 @@
+import re
 import discord
 import ollama
 from flask import Flask, render_template, request, url_for, flash, redirect
@@ -18,7 +19,7 @@ class Agent:
 
     MODERATOR_AGENT='''
     FROM llama3
-    SYSTEM You are a discord moderator model, you moderate discord messages that contain harmful or harrassing language by alerting the user and proposing sanctions to give according to the gravity of the message. You tolerate light speech as you are a member of a gaming community. You tolerate some aduld content as you are a member of a mature community. You format your response with "Alerte" "Moderation" and "Sanction" on different lines. You keep Alerte and Sanction section short and clear, and you can use a maximum of 10 words for each response. You explain a bit more in the Moderation section.
+    SYSTEM You are a discord moderator model, you moderate discord messages that contain harmful or harrassing language by alerting the user and proposing sanctions to give according to the gravity of the message. You tolerate light speech as you are a member of a gaming community. You tolerate some aduld content as you are a member of a mature community. You format your response with "Alerte: " "Moderation: " and "Sanction: " on different lines. You keep Alerte and Sanction section short and clear, and you can use a maximum of 10 words for each response. You explain a bit more in the Moderation section.
     '''
 
     GREETING_MODEL='''
@@ -69,6 +70,7 @@ class Agent:
 
     def moderate(self, message):
         try:
+            message = str(message)
             response = self.prompt(message, role="user", model="moderator")
             print(response)
             return response
@@ -128,15 +130,22 @@ async def on_message(message):
     else:
         if agent.inspect(message.content) == "harmful":
             alert = f'`{message.author} a dis {message.content}`'
-            user = str(get_user(str(message.author)))
+            user = get_user(message.author)
             if flagged(user) is True:
-                previous_messages = get_messages(str(message.author))
-                blame = f"Has already been warned {len(previous_messages)} times" if len(previous_messages) > 1 else ""
-                print(previous_messages, blame)
-                moderation = agent.moderate(message.content + "already been warned for" + str(previous_messages) + blame)
+                previous_messages = get_messages(message.author)
+                if len(previous_messages) > 1:
+                    blame = f"Has already been warned {len(previous_messages)} times"
+                else:
+                    blame = "Second warning"
+                previous = str(previous_messages)
+                last_sanction = get_sanction(message.author)
+                sanction = str(last_sanction)
+                print(sanction)
+                moderation = agent.moderate(message.content + blame + "Previous sanction was:" + sanction + "Has already been warned for his previous message:" + previous)
             else:
                 flag(user)
-                moderation = agent.moderate(message.content)
+                blame = "First warning"
+                moderation = agent.moderate(message.content + blame)
             store_moderation(message.author, message.content, moderation)
             await message.channel.send(alert)
             await message.channel.send(moderation)
@@ -174,13 +183,33 @@ def get_post(post_id):
     return post
 
 def get_messages(username):
+    username = str(username)
     conn = get_db_connection()
     cursor = conn.execute("SELECT message FROM posts WHERE author = ? ORDER BY created DESC", (username,))
     messages = [row[0] for row in cursor.fetchall()]
     conn.close()
     return messages
 
+def get_moderation(username):
+    username = str(username)
+    conn = get_db_connection()
+    cursor = conn.execute("SELECT moderation FROM posts WHERE author = ? ORDER BY created DESC", (username,))
+    moderations = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return moderations
+
+def get_sanction(username):
+    username = str(username)
+    get_moderation(username)
+    sanctions = []
+    for moderation in get_moderation(username):
+        sanction = re.search(r'Sanction: (.*)', moderation)
+        if sanction:
+            sanctions.append(sanction[1])
+    return sanctions
+
 def get_user(username):
+    username = str(username)
     conn = get_db_connection()
     cursor = conn.execute("SELECT id FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
@@ -196,6 +225,7 @@ def get_user(username):
     return user_id
 
 def flagged(user_id):
+    user_id = str(user_id)
     conn = get_db_connection()
     cursor = conn.execute("SELECT is_warned FROM users WHERE id = ?", (user_id,))
     result = cursor.fetchone()
