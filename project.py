@@ -4,6 +4,10 @@ from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
 from threading import Thread
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 class Agent:
     ############MODELS###########
@@ -82,7 +86,7 @@ class Agent:
 
 
 ############DISCORD###########
-TOKEN = "MTI0MjA2MzE3ODY4NzU3ODE2Mw.Gxpmsw.wKYWNCjaC-BjXXbbPNn1FgSyY29FNM5ea60EIs"
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 
 intents = discord.Intents.default()
@@ -124,12 +128,17 @@ async def on_message(message):
     else:
         if agent.inspect(message.content) == "harmful":
             alert = f'`{message.author} a dis {message.content}`'
-            moderation = agent.moderate(message.content)
+            user = get_user(str(message.author))
+            if flagged(user):
+                previous_messages = get_messages(user)
+                blame = f"Has already been warned {len(previous_messages)} times" if len(previous_messages) > 1 else ""
+                moderation = agent.moderate(message.content + "already been warned for" + str(previous_messages) + blame)
+            else:
+                flag(user)
+                moderation = agent.moderate(message.content)
+            store_moderation(message.author, message.content, moderation)
             await message.channel.send(alert)
             await message.channel.send(moderation)
-            user = get_user(str(message.author))
-            if 
-            store_moderation(message.author, message.content, moderation)
 
 
 async def on_member_join(member):
@@ -159,6 +168,12 @@ def get_post(post_id):
         abort(404)
     return post
 
+def get_messages(username):
+    conn = get_db_connection()
+    message = conn.execute("SELECT message FROM posts WHERE username = ?", (username,)).fetchall()
+    conn.close()
+    return message
+
 def get_user(username):
     conn = get_db_connection()
     user = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
@@ -169,12 +184,12 @@ def get_user(username):
     conn.close()
     return user
 
-def is_flagged(user_id):
+def flagged(user_id):
     conn = get_db_connection()
     flagged = conn.execute("SELECT is_warned FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     return True if flagged == "TRUE" else False
-def flag_user(user_id):
+def flag(user_id):
     conn = get_db_connection()
     conn.execute("UPDATE users SET is_warned=TRUE WHERE id = ?", (user_id,))
     conn.commit()
