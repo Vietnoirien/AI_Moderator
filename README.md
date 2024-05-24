@@ -33,7 +33,10 @@ This project is a Python application that combines a Discord bot with a Flask we
 
 3. **Set up the DISCORD_TOKEN and other environment variables in a `.env` file.**
 
-4. **Initialize the SQLite database by running the `schema.sql` script.**
+4. **Initialize the SQLite database by running the `init_db` script.**
+   ```bash
+   python init_db.py
+   ```
 
 ## Usage
 
