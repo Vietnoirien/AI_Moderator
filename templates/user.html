@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <h1>{% block title %} {{ username }} {% endblock %}</h1>
+  <div class="container">
+    <div class="row">
+      <div class="col-md-8">
+        <hr>
+        <!-- User Posts -->
+        {% for post in posts %}
+          <a href="{{ url_for('post', post_id=post['id']) }}">
+            <p>{{ post['message'] }}</p>
+          </a>
+          <hr>
+        {% endfor %}
+      </div>
+      <div class="col-md-4">
+        <!-- Analysis Card -->
+        <div class="card mb-3">
+          <h5 class="card-title">Analysis</h5>
+          {{ analysis }}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

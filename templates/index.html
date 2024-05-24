@@ -3,13 +3,20 @@
 {% block content %}
     <h1>{% block title %} Moderated Users {% endblock %}</h1>
     {% for post in posts %}
-        <a href="{{ url_for('post', post_id=post['id']) }}" >
-            <h2>{{post['author']}}</h2>
+        <a href="{{ url_for('users', username=post['author']) }}">
+            <h2>{{ post['author'] }}</h2>
         </a>
-        <span class="badge badge-primary">{{post['created']}}</span>
-        <a href="{{ url_for('edit', id=post['id']) }}">
-            <span class="badge badge-warning">Edit</span>
+        <a href="{{ url_for('post', post_id=post['id']) }}">
+            <p>{{ post['message'] }}</p>
         </a>
-        <hr >
+        <span class="badge badge-primary">{{ post['created'] }}</span>
+        {% set user_id = get_user(post['author']) %}
+        {% if flagged(user_id) %}
+            <span class="badge badge-warning">Warned</span>
+            {% if number_of_messages(post['author']) > 2 %}
+                <span class="badge badge-danger">Recidivist</span>
+            {% endif %}
+        {% endif %}
+        <hr>
     {% endfor %}
 {% endblock %}

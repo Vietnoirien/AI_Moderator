@@ -1,5 +1,9 @@
+from email import utils
 import re
+from textwrap import wrap
+from turtle import mode
 import discord
+from httpx import get
 import ollama
 from flask import Flask, render_template, request, session, url_for, flash, redirect
 from werkzeug.exceptions import abort
@@ -12,6 +16,7 @@ import signal
 import sys
 import asyncio
 import aiohttp
+from functools import wraps
 
 flask_thread = None
 bot_thread = None
@@ -62,7 +67,6 @@ class Agent:
     def inspect(self, message):
         try:
             response = self.prompt(message, role="user", model_name="inspect_agent")
-            print(response)
             return response.lower()
         except ollama.ResponseError as e:
             print('Error:', e.error)
@@ -72,7 +76,6 @@ class Agent:
         try:
             message = str(message)
             response = self.prompt(message, role="user", model_name="moderator_agent")
-            print(response)
             return response
         except ollama.ResponseError as e:
             print('Error:', e.error)
@@ -80,16 +83,23 @@ class Agent:
     def greeting(self, user):
         try:
             response = self.prompt(user, role="user", model_name="greeting_model")
-            print(response)
             return response
         except ollama.ResponseError as e:
             print('Error:', e.error)
 
+    def evaluate(self, user):
+        messages = str(get_messages(user))
+        prompt ="Your patient is {} here his past messages: {}. Just provide a short comment on the patient state".format(user, messages)
+        try:
+            response = self.prompt(prompt, role="user", model_name="psychotherapist_agent")
+            return response
+        except ollama.ResponseError as e:
+            print('Error:', e.error)
 
 def summoning():
     global agent
     agent = Agent()
-    msg = agent.sysmsg("You have to say that the Agent has been summoned")
+    msg = agent.sysmsg("message is Agent has been summoned")
     return msg
 
 
@@ -105,7 +115,7 @@ summoning()
 
 @client.event
 async def on_ready():
-    ready = agent.sysmsg("give a validation that you are logged as" + str(client.user))
+    ready = agent.sysmsg("message is a validation that bot is logged as" + str(client.user))
     print(ready)
 
     
@@ -137,7 +147,7 @@ async def on_message(message):
     else:
         if agent.inspect(message.content) == "harmful":
             alert = f'`{message.author} a dis {message.content}`'
-            user = get_user(message.author)
+            user = get_user_id(message.author)
             if flagged(user) is True:
                 previous_messages = get_messages(message.author)
                 if len(previous_messages) > 1:
@@ -187,6 +197,12 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def get_posts():
+    conn = get_db_connection()
+    posts = conn.execute("SELECT * FROM posts").fetchall()
+    conn.close()
+    return posts
+
 def get_post(post_id):
     conn = get_db_connection()
     post = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
@@ -194,6 +210,12 @@ def get_post(post_id):
     if post is None:
         abort(404)
     return post
+
+def get_user_posts(username):
+    conn = get_db_connection()
+    posts = conn.execute("SELECT * FROM posts WHERE author=? ", (username,)).fetchall()
+    conn.close()
+    return posts
 
 def get_messages(username):
     username = str(username)
@@ -203,6 +225,15 @@ def get_messages(username):
     conn.close()
     return messages
 
+def get_message(post_id):
+    conn = get_db_connection()
+    message = conn.execute("SELECT message FROM posts WHERE id = ?", (post_id,)).fetchone()
+    conn.close()
+    if message is None:
+        abort(404)
+    return message[0]
+    
+
 def get_moderation(username):
     username = str(username)
     conn = get_db_connection()
@@ -210,6 +241,14 @@ def get_moderation(username):
     moderations = [row[0] for row in cursor.fetchall()]
     conn.close()
     return moderations
+
+def number_of_messages(username):
+    username = str(username)
+    conn = get_db_connection()
+    cursor = conn.execute("SELECT COUNT(*) FROM posts WHERE author = ?", (username,))
+    number = cursor.fetchone()[0]
+    conn.close()
+    return number
 
 def get_sanction(username):
     username = str(username)
@@ -221,7 +260,7 @@ def get_sanction(username):
             sanctions.append(sanction[1])
     return sanctions
 
-def get_user(username):
+def get_user_id(username):
     username = str(username)
     conn = get_db_connection()
     cursor = conn.execute("SELECT id FROM users WHERE username = ?", (username,))
@@ -246,7 +285,6 @@ def flagged(user_id):
     if result is None:
         return None
     is_warned = result[0]
-    print(is_warned)
     return True if is_warned == 1 else False
 
 def flag(user_id):
@@ -265,16 +303,26 @@ def store_moderation(user, message, moderation):
 
 ############FLASK###########
 
+def template_utils(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        template_utils = {
+            'get_user': get_user_id,
+            'flagged': flagged,
+            'number_of_messages': number_of_messages,
+        }
+        kwargs['utils'] = template_utils
+        return func(*args, **kwargs)
+    return wrapper
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret'
 
 @app.route('/')
-def index():
-    conn = get_db_connection()
-    posts = conn.execute("SELECT * FROM posts").fetchall()
-    conn.close()
-    return render_template('index.html', posts=posts)
+@template_utils
+def index(utils):
+    posts = get_posts()
+    return render_template('index.html', posts=posts, **utils)
 
 @app.route('/<int:post_id>')
 def post(post_id):
@@ -295,9 +343,12 @@ def edit_model(model_name):
     if request.method == 'POST':
         model_data['model'] = request.form['model']
         model_data['sysprompt'] = request.form['sysprompt']
-        with open('models.json', 'w') as f:
-            json.dump(models, f, indent=2)
-        return redirect(url_for('models'))
+        if not model_data['model'] or not model_data['sysprompt']:
+            flash("Model and system prompt are required")
+        else:
+            with open('models.json', 'w') as f:
+                json.dump(models, f, indent=2)
+            return redirect(url_for('models'))
     return render_template('edit_model.html', model_name=model_name, model_data=model_data)
 
 @app.route('/summon_agent', methods=['POST'])
@@ -306,46 +357,15 @@ def summon_agent():
     flash(summoned)
     return redirect(url_for('models'))
 
-@app.route('/create', methods=['GET', 'POST'])
-def create():
-    if request.method == 'POST':
-        title = request.form['title']
-        content = request.form['content']
-        if not title or not content:
-            flash('Title and content are required!')
-        else:
-            conn = get_db_connection()
-            conn.execute("INSERT INTO posts (title, content) VALUES (?, ?)", (title, content))
-            conn.commit()
-            conn.close()
-            return redirect(url_for('index'))
-    return render_template('create.html')
+@app.route('/<string:username>')
+def users(username):
+    analysis = agent.evaluate(username)
+    posts = get_user_posts(username)
+    return render_template('user.html', analysis=analysis, posts=posts, username=username)
 
-@app.route('/<int:id>/edit', methods=['GET', 'POST'])
-def edit(id):
-    post = get_post(id)
-    if request.method == 'POST':
-        title = request.form['title']
-        content = request.form['content']
-        if not title or not content:
-            flash('Title and content are required!')
-        else:
-            conn = get_db_connection()
-            conn.execute("UPDATE posts SET title=?, content=? WHERE id=?", (title, content, id))
-            conn.commit()
-            conn.close()
-            return redirect(url_for('index'))
-    return render_template('edit.html', post=post)
 
-@app.route('/<int:id>/delete', methods=['POST'])
-def delete(id):
-    post = get_post(id)
-    conn = get_db_connection()
-    conn.execute("DELETE FROM posts WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
-    flash('"{}" was successfully deleted!'.format(post['title']))
-    return redirect(url_for('index'))
+
+###########SIGNAL HANDLER/MAINLOOP############
 
 
 def signal_handler(signal, frame):
