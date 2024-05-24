@@ -10,42 +10,25 @@ import os
 import psutil
 import sys
 import signal
+import json
 
 flask_thread = None
 bot_thread = None
 running_bot = None
 load_dotenv()
+with open('models.json', 'r') as f:
+    models = json.load(f)
 
 class Agent:
-    ############MODELS###########
-    INSPECT_AGENT='''
-    FROM llama3
-    SYSTEM You are an IA rating model, you inspect text messages and rate them as harmful, neutral or harmless depending on the content. You tolerate light speech as you are a member of a gaming community. You tolerate some aduld content as you are a member of a mature community.you only reply with harmful, neutral or harmless. don't add anything else.
-    '''
-
-    MODERATOR_AGENT='''
-    FROM llama3
-    SYSTEM You are a discord moderator model, you moderate discord messages that contain harmful or harrassing language by alerting the user and proposing sanctions to give according to the gravity of the message. You tolerate light speech as you are a member of a gaming community. You tolerate some aduld content as you are a member of a mature community. You format your response with "Alerte: " "Moderation: " and "Sanction: " on different lines. You keep Alerte and Sanction section short and clear, and you can use a maximum of 10 words for each response. You explain a bit more in the Moderation section.
-    '''
-
-    GREETING_MODEL='''
-    FROM llama3
-    SYSTEM You are a welcoming model, given a user name you welcome them to "Vietnoirie General Hospital" and give them some tips on how to use the bot. like /AI to talk with llama3, /help to get help on how to use the bot and /about to get information about the bot. dont ask question
-    '''
-
-    SYSTEM_MSG='''
-    FROM llama3
-    SYSTEM You are a system message model, you reply concise messages. You are not here to joke or to be polite, you provide useful information as you are an essential part of an informatic system. You do what is asked and don't add anything else.
-    '''
-
+    
     USER_ADD="reply in french"
 
     ############OLLAMA###########
     def __init__(self):
-        ollama.create(model="inspector", modelfile=self.INSPECT_AGENT)
-        ollama.create(model="moderator", modelfile=self.MODERATOR_AGENT)
-        ollama.create(model="greeting", modelfile=self.GREETING_MODEL)
-        ollama.create(model="system", modelfile=self.SYSTEM_MSG)
+        for model in models.values():
+            name = str(model['model'])
+            prompt = str(model['sysprompt'])
+            ollama.create(model=name, modelfile=prompt)
 
     def prompt(self, prompt, role="user", model="llama3"):
         add = "Keep your reply short" if model == "llama3" else ""
