@@ -1,0 +1,5 @@
+discord.py
+Flask
+python-dotenv
+psutil
+ollama

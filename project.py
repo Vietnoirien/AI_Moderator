@@ -7,7 +7,13 @@ import sqlite3
 from threading import Thread
 from dotenv import load_dotenv
 import os
+import psutil
+import sys
+import signal
 
+flask_thread = None
+bot_thread = None
+running_bot = None
 load_dotenv()
 
 class Agent:
@@ -141,7 +147,7 @@ async def on_message(message):
                 last_sanction = get_sanction(message.author)
                 sanction = str(last_sanction)
                 print(sanction)
-                moderation = agent.moderate(message.content + blame + "Previous sanction was:" + sanction + "Has already been warned for his previous message:" + previous)
+                moderation = agent.moderate(message.content + "This is a recidivist" + blame + "Previous sanction was:" + sanction + "Has already been warned for his previous message:" + previous)
             else:
                 flag(user)
                 blame = "First warning"
@@ -158,13 +164,29 @@ async def on_member_join(member):
 
 
 def run_bot():
-    client.run(TOKEN)
-    return "Bot is running"
+    global running_bot, bot_thread
 
-def thread_bot():
-    bot = Thread(target=run_bot, daemon=True)
-    bot.start()
+    # Vérifier si le bot est déjà en cours d'exécution
+    for proc in psutil.process_iter(['name']):
+        if proc.info['name'] == 'python.exe' and 'discord' in ' '.join(proc.cmdline()).lower():
+            running_bot = proc
+            break
 
+    if running_bot:
+        # Le bot est déjà en cours d'exécution, l'arrêter
+        running_bot.terminate()
+        print("Bot arrêté")
+        running_bot = None
+        if bot_thread:
+            bot_thread.join()
+            bot_thread = None
+    else:
+        # Démarrer le bot dans un nouveau thread
+        bot_thread = Thread(target=client.run, args=(TOKEN,), daemon=True)
+        bot_thread.start()
+        print("Bot démarré")
+
+    return "Bot démarré" if running_bot is None else "Bot arrêté"
 
 ##############DATABASE###########
 
@@ -265,7 +287,7 @@ def index():
 
 @app.route('/run', methods=['POST'])
 def run():
-    thread_bot()
+    print(run_bot())
     return redirect(url_for('index'))
 
 
@@ -316,5 +338,13 @@ def delete(id):
     return redirect(url_for('index'))
 
 if __name__ == "__main__":
-    thread_bot()
-    app.run()  
+    app.run()
+
+    def signal_handler(signal, frame):
+        print('Arrêt de l\'application...')
+        if bot_thread:
+            bot_thread.join()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.pause()
