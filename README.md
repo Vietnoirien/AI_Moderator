@@ -1,4 +1,4 @@
-# AI Moderator: Your Discord Moderation Bot
+# AI Moderator: Your Discord Moderation AI
 
 This project is a Python application that combines a Discord bot with a Flask web application and an SQLite database. The Discord bot is designed to moderate user messages, inspect their content for harmful or inappropriate language, and propose appropriate sanctions based on the severity of the message. The Flask app provides a web interface to manage and display the moderated messages, moderations, and sanctions stored in the database.
 
@@ -33,7 +33,10 @@ This project is a Python application that combines a Discord bot with a Flask we
 
 3. **Set up the DISCORD_TOKEN and other environment variables in a `.env` file.**
 
-4. **Initialize the SQLite database by running the `schema.sql` script.**
+4. **Initialize the SQLite database by running the `init_db` script.**
+   ```bash
+   python init_db.py
+   ```
 
 ## Usage
 
