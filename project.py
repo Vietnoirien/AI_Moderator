@@ -1,20 +1,24 @@
+from ast import arg
 import re
 import discord
 import ollama
-from flask import Flask, render_template, request, url_for, flash, redirect
+from flask import Flask, render_template, request, session, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
 from threading import Thread
 from dotenv import load_dotenv
 import os
-import psutil
-import sys
-import signal
 import json
+import signal
+import sys
+import asyncio
+import aiohttp
 
 flask_thread = None
 bot_thread = None
 running_bot = None
+connector = None
+client_session = None
 load_dotenv()
 
 
@@ -85,8 +89,6 @@ class Agent:
 
 ############DISCORD###########
 TOKEN = os.getenv("DISCORD_TOKEN")
-print(TOKEN)
-
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -96,8 +98,9 @@ agent = Agent()
 
 @client.event
 async def on_ready():
-    ready=agent.sysmsg("give a validation that you are logged as" + str(client.user))
+    ready = agent.sysmsg("give a validation that you are logged as" + str(client.user))
     print(ready)
+
     
 
 @client.event
@@ -144,7 +147,7 @@ async def on_message(message):
                 blame = "First warning"
                 moderation = agent.moderate(message.content + blame)
             store_moderation(message.author, message.content, moderation)
-            await message.channel.send(alert)
+            await message.author.mention(alert)
             await message.channel.send(moderation)
 
 
@@ -153,31 +156,21 @@ async def on_member_join(member):
     if guild.system_channel is not None:
         await guild.system_channel.send(agent.greeting(member.mention)) 
 
+async def create_session():
+    global client_session, connector
+    connector = aiohttp.TCPConnector()
+    client_session = aiohttp.ClientSession(connector=connector)
+
+async def close_discord_client():
+    await client.close()
+    await client_session.close()
+    await connector.close()
 
 def run_bot():
-    global running_bot, bot_thread
+    global bot_thread
+    bot_thread = Thread(target=client.run, args=(TOKEN,), daemon=True)
+    bot_thread.start()
 
-    # Vérifier si le bot est déjà en cours d'exécution
-    for proc in psutil.process_iter(['name']):
-        if proc.info['name'] == 'python.exe' and 'discord' in ' '.join(proc.cmdline()).lower():
-            running_bot = proc
-            break
-
-    if running_bot:
-        # Le bot est déjà en cours d'exécution, l'arrêter
-        running_bot.terminate()
-        print("Bot arrêté")
-        running_bot = None
-        if bot_thread:
-            bot_thread.join()
-            bot_thread = None
-    else:
-        # Démarrer le bot dans un nouveau thread
-        bot_thread = Thread(client.run(TOKEN))
-        bot_thread.start()
-        print("Bot démarré")
-
-    return "Bot démarré" if running_bot is None else "Bot arrêté"
 
 ##############DATABASE###########
 
@@ -276,12 +269,6 @@ def index():
     conn.close()
     return render_template('index.html', posts=posts)
 
-@app.route('/run', methods=['POST'])
-def run():
-    print(run_bot())
-    return redirect(url_for('index'))
-
-
 @app.route('/<int:post_id>')
 def post(post_id):
     post = get_post(post_id)
@@ -328,14 +315,21 @@ def delete(id):
     flash('"{}" was successfully deleted!'.format(post['title']))
     return redirect(url_for('index'))
 
+
+def signal_handler(signal, frame):
+    print("Arrêt du bot Discord...")
+    if bot_thread and bot_thread.is_alive():
+        asyncio.run_coroutine_threadsafe(close_discord_client(), client.loop)
+        bot_thread.join()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
 if __name__ == "__main__":
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(create_session())
+    thread = Thread(target=run_bot)
+    thread.start()
     app.run()
 
-    def signal_handler(signal, frame):
-        print('Arrêt de l\'application...')
-        if bot_thread:
-            bot_thread.join()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.pause()
