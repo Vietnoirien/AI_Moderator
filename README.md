@@ -31,7 +31,7 @@ This project is a Python application that combines a Discord bot with a Flask we
     pip install -r requirements.txt
     ```
 
-3. **Set up the Discord bot token and other environment variables in a `.env` file.**
+3. **Set up the DISCORD_TOKEN and other environment variables in a `.env` file.**
 
 4. **Initialize the SQLite database by running the `schema.sql` script.**
 
