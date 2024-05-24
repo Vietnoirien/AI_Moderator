@@ -1,4 +1,3 @@
-from ast import arg
 import re
 import discord
 import ollama
@@ -19,20 +18,21 @@ bot_thread = None
 running_bot = None
 connector = None
 client_session = None
+agent = None
+
 load_dotenv()
 
 
 
 ############OLLAMA###########
-with open('models.json', 'r') as f:
-    models = json.load(f)
-
 class Agent:
 
     USER_ADD="reply in french"
 
     
     def __init__(self):
+        with open('models.json', 'r') as f:
+            models = json.load(f)
         self.model_names = {}
         for model_name, model_data in models.items():
             name = str(model_data['model'])
@@ -86,6 +86,12 @@ class Agent:
             print('Error:', e.error)
 
 
+def summoning():
+    global agent
+    agent = Agent()
+    msg = agent.sysmsg("You have to say that the Agent has been summoned")
+    return msg
+
 
 ############DISCORD###########
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -94,7 +100,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 client = discord.Client(intents=intents)
-agent = Agent()
+summoning()
+
 
 @client.event
 async def on_ready():
@@ -273,6 +280,31 @@ def index():
 def post(post_id):
     post = get_post(post_id)
     return render_template('post.html', post=post)
+
+@app.route('/models')
+def models():
+    with open('models.json', 'r') as f:
+        models = json.load(f)
+    return render_template('models.html', models=models)
+
+@app.route('/models/<model_name>/edit', methods=['GET', 'POST'])
+def edit_model(model_name):
+    with open('models.json', 'r') as f:
+        models = json.load(f)
+    model_data = models.get(model_name)
+    if request.method == 'POST':
+        model_data['model'] = request.form['model']
+        model_data['sysprompt'] = request.form['sysprompt']
+        with open('models.json', 'w') as f:
+            json.dump(models, f, indent=2)
+        return redirect(url_for('models'))
+    return render_template('edit_model.html', model_name=model_name, model_data=model_data)
+
+@app.route('/summon_agent', methods=['POST'])
+def summon_agent():
+    summoned = summoning()
+    flash(summoned)
+    return redirect(url_for('models'))
 
 @app.route('/create', methods=['GET', 'POST'])
 def create():

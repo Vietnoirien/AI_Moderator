@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Éditer les modèles</h1>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Nom du modèle</th>
+      <th>Modèle</th>
+      <th>Invite système</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for model_name, model_data in models.items() %}
+    <tr>
+      <td>{{ model_name }}</td>
+      <td>{{ model_data['model'] }}</td>
+      <td>{{ model_data['sysprompt'] }}</td>
+      <td>
+        <a href="{{ url_for('edit_model', model_name=model_name) }}" class="btn btn-primary btn-sm">Éditer</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<form action="{{ url_for('summon_agent') }}" method="post">
+  <button type="submit" class="btn btn-success">Appliquer les changements</button>
+</form>
+{% endblock %}
