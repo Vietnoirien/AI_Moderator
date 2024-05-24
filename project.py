@@ -16,21 +16,28 @@ flask_thread = None
 bot_thread = None
 running_bot = None
 load_dotenv()
+
+
+
+############OLLAMA###########
 with open('models.json', 'r') as f:
     models = json.load(f)
 
 class Agent:
-    
+
     USER_ADD="reply in french"
 
-    ############OLLAMA###########
+    
     def __init__(self):
-        for model in models.values():
-            name = str(model['model'])
-            prompt = str(model['sysprompt'])
+        self.model_names = {}
+        for model_name, model_data in models.items():
+            name = str(model_data['model'])
+            prompt = str(model_data['sysprompt'])
             ollama.create(model=name, modelfile=prompt)
+            self.model_names[model_name] = name
 
-    def prompt(self, prompt, role="user", model="llama3"):
+    def prompt(self, prompt, role="user", model_name="llama3"):
+        model = self.model_names.get(model_name, "llama3")
         add = "Keep your reply short" if model == "llama3" else ""
         user_add = self.USER_ADD if model != "system" else ""
         message = {'role': role, 'content': user_add + prompt + add,}
@@ -43,14 +50,14 @@ class Agent:
 
     def sysmsg(self, message):
         try:
-            response = self.prompt(message, role="user", model="system")
+            response = self.prompt(message, role="user", model_name="system_msg")
             return response
         except ollama.ResponseError as e:
             print('Error:', e.error)
 
     def inspect(self, message):
         try:
-            response = self.prompt(message, role="user", model="inspector")
+            response = self.prompt(message, role="user", model_name="inspect_agent")
             print(response)
             return response.lower()
         except ollama.ResponseError as e:
@@ -60,7 +67,7 @@ class Agent:
     def moderate(self, message):
         try:
             message = str(message)
-            response = self.prompt(message, role="user", model="moderator")
+            response = self.prompt(message, role="user", model_name="moderator_agent")
             print(response)
             return response
         except ollama.ResponseError as e:
@@ -68,7 +75,7 @@ class Agent:
 
     def greeting(self, user):
         try:
-            response = self.prompt(user, role="user", model="greeting")
+            response = self.prompt(user, role="user", model_name="greeting_model")
             print(response)
             return response
         except ollama.ResponseError as e:
@@ -78,6 +85,7 @@ class Agent:
 
 ############DISCORD###########
 TOKEN = os.getenv("DISCORD_TOKEN")
+print(TOKEN)
 
 
 intents = discord.Intents.default()
@@ -165,7 +173,7 @@ def run_bot():
             bot_thread = None
     else:
         # Démarrer le bot dans un nouveau thread
-        bot_thread = Thread(target=client.run, args=(TOKEN,), daemon=True)
+        bot_thread = Thread(client.run(TOKEN))
         bot_thread.start()
         print("Bot démarré")
 
