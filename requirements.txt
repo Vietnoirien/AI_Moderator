@@ -3,3 +3,5 @@ Flask
 python-dotenv
 psutil
 ollama
+torch
+numpy

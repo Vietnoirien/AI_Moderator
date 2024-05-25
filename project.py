@@ -1,9 +1,5 @@
-from email import utils
 import re
-from textwrap import wrap
-from turtle import mode
 import discord
-from httpx import get
 import ollama
 from flask import Flask, render_template, request, session, url_for, flash, redirect
 from werkzeug.exceptions import abort
@@ -17,6 +13,8 @@ import sys
 import asyncio
 import aiohttp
 from functools import wraps
+import torch
+import numpy
 
 flask_thread = None
 bot_thread = None
@@ -24,6 +22,11 @@ running_bot = None
 connector = None
 client_session = None
 agent = None
+vault_content = []
+vault_embed = []
+
+conversation_history = []
+system_message = "You are a helpful assistant that is an expert at extracting the most useful information from a given text"
 
 load_dotenv()
 
@@ -36,14 +39,23 @@ class Agent:
 
     
     def __init__(self):
+        load_vault()
+        embed_vault()
         with open('models.json', 'r') as f:
             models = json.load(f)
         self.model_names = {}
+        installed = ollama.list()
+        for model in installed['models']:
+            if model['name'] == 'mxbai-embed-large:latest':
+                print("found mxbai")
+            else:
+                ollama.pull('mxbai-embed-large:latest')
         for model_name, model_data in models.items():
             name = str(model_data['model'])
             prompt = str(model_data['sysprompt'])
             ollama.create(model=name, modelfile=prompt)
             self.model_names[model_name] = name
+        
 
     def prompt(self, prompt, role="user", model_name="llama3"):
         model = self.model_names.get(model_name, "llama3")
@@ -89,18 +101,69 @@ class Agent:
 
     def evaluate(self, user):
         messages = str(get_messages(user))
-        prompt ="Your patient is {} here his past messages: {}. Just provide a short comment on the patient state".format(user, messages)
+        prompt ="Your patient is {} here his past messages: {}. Just provide a short comment on the patient state, 2 sentences maximum.".format(user, messages)
         try:
             response = self.prompt(prompt, role="user", model_name="psychotherapist_agent")
             return response
         except ollama.ResponseError as e:
             print('Error:', e.error)
 
+    def get_context(self, user_input, vault_embed, vault_content, top_k = 3):
+        if vault_embed.nelement() == 0:
+            return []
+        input_embed = ollama.embeddings(model = "xbai-embed-large", prompt = user_input)["embedding"]
+        cos_scores = torch.cosine_similarity(torch.tensor(input_embed).unsqueeze(0), vault_embed)
+        top_k = min(top_k, len(cos_scores))
+        top_indices = torch.topk(cos_scores, k=top_k).tolist()
+        return [vault_content[i] for i in top_indices]
+    
+    def chat(self, user_input, system_message, vault_embed, vault_content, model, conversation_history):
+        relevant_context = self.get_context(user_input, vault_embed_tensor, vault_content, 3)
+        if relevant_context:
+            context_str = "\n".join(relevant_context)
+        else:
+            print("No context found")
+        user_input_with_context = user_input
+        if relevant_context:
+            user_input_with_context = "{} \n\n {}".format(user_input, context_str)
+        conversation_history.append({"role": "user", "content": user_input_with_context})
+        messages = [
+            {"role": "system", "content": system_message},
+            *conversation_history
+        ]
+        print(messages)
+        response = ollama.chat(
+            model=model,
+            messages=messages
+        )
+        conversation_history.append({"role": "assistant", "content": response['message']['content']})
+        return response['message']['content']
+
 def summoning():
     global agent
     agent = Agent()
     msg = agent.sysmsg("message is Agent has been summoned")
     return msg
+
+
+############RAG###############
+
+
+def load_vault():
+    global vault_content
+    if os.path.exists('vault.txt'):
+        with open('vault.txt', 'r', encoding = 'utf-8') as f:
+            vault_content = f.readlines()
+
+def embed_vault():
+    global vault_embed, vault_embed_tensor
+    for content in vault_content:
+        response = ollama.embeddings(model="xbai-embed-large", prompt=content)
+        vault_embed.append(response["embedding"])
+    vault_embed_tensor = torch.tensor(vault_embed)
+
+
+
 
 
 ############DISCORD###########
@@ -126,7 +189,7 @@ async def on_message(message):
         return
 
     if message.content.startswith('/chat'):
-        await message.channel.send(agent.prompt(message.content[4:]))
+        await message.channel.send(agent.chat(message.content[5:], system_message, vault_embed_tensor, vault_content, "llama3", conversation_history))
 
     if message.content.startswith('/help'):
         await message.channel.send('''
@@ -134,16 +197,18 @@ async def on_message(message):
 /help : Affiche cette page
 /about : Information à propos du bot
         ''')
+        return
     
     if message.content.startswith('/about'):
         await message.channel.send('''
             Votre-pire-cauchemard est un bot Discord développé par Vietnoirien qui évalue les messages en fonction de leur contenu et alerte les modérateurs en cas d'offense, proposant des sanctions appropriées !
         ''')
-
+        return
+    
     if message.content.startswith('/test_greeting'):
         await message.channel.send(agent.greeting(message.author.name))
+        return
             
-
     else:
         if agent.inspect(message.content) == "harmful":
             alert = f'`{message.author} a dis {message.content}`'
@@ -164,7 +229,7 @@ async def on_message(message):
                 blame = "First warning"
                 moderation = agent.moderate(message.content + blame)
             store_moderation(message.author, message.content, moderation)
-            await message.author.mention(alert)
+            await message.channel.send(alert)
             await message.channel.send(moderation)
 
 
@@ -303,6 +368,12 @@ def store_moderation(user, message, moderation):
 
 ############FLASK###########
 
+
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret'
+
+
 def template_utils(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -315,8 +386,6 @@ def template_utils(func):
         return func(*args, **kwargs)
     return wrapper
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret'
 
 @app.route('/')
 @template_utils
