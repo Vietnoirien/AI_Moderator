@@ -10,7 +10,6 @@ This project is a Python application that combines a Discord bot with a Flask we
 - **SQLite database for storing user messages, moderations, and sanctions**
 - **Flask web application for managing and displaying moderated content**
 - **User interface for viewing moderated messages, moderations, and sanctions**
-- **Ability to start and stop the Discord bot from the web interface**
 
 ## Requirements
 
