@@ -14,19 +14,22 @@ import asyncio
 import aiohttp
 from functools import wraps
 import torch
-import numpy
+import numpy as np
 
 flask_thread = None
 bot_thread = None
 running_bot = None
 connector = None
 client_session = None
+
 agent = None
+
 vault_content = []
 vault_embed = []
+vault_embed_tensor = None
 
 conversation_history = []
-system_message = "You are a helpful assistant that is an expert at extracting the most useful information from a given text"
+system_message = "You are a helpful assistant that is an expert at extracting the most useful information from a given text. You are on a discord server and have messages on the format 'user': 'message'"
 
 load_dotenv()
 
@@ -34,13 +37,10 @@ load_dotenv()
 
 ############OLLAMA###########
 class Agent:
-
     USER_ADD="reply in french"
-
+    sys_models = ["system_msg", "relevancy_agent"]
     
     def __init__(self):
-        load_vault()
-        embed_vault()
         with open('models.json', 'r') as f:
             models = json.load(f)
         self.model_names = {}
@@ -50,6 +50,9 @@ class Agent:
                 print("found mxbai")
             else:
                 ollama.pull('mxbai-embed-large:latest')
+        reset_vault()
+        load_vault()
+        embed_vault()
         for model_name, model_data in models.items():
             name = str(model_data['model'])
             prompt = str(model_data['sysprompt'])
@@ -60,8 +63,8 @@ class Agent:
     def prompt(self, prompt, role="user", model_name="llama3"):
         model = self.model_names.get(model_name, "llama3")
         add = "Keep your reply short" if model == "llama3" else ""
-        user_add = self.USER_ADD if model != "system" else ""
-        message = {'role': role, 'content': user_add + prompt + add,}
+        user_add = self.USER_ADD if model_name not in self.sys_models else ""
+        message = {'role': role, 'content': user_add + " " + prompt + add,}
         try:
             response = ollama.chat(model=model, messages=[message])
             return response['message']['content']
@@ -111,33 +114,54 @@ class Agent:
     def get_context(self, user_input, vault_embed, vault_content, top_k = 3):
         if vault_embed.nelement() == 0:
             return []
-        input_embed = ollama.embeddings(model = "xbai-embed-large", prompt = user_input)["embedding"]
+        input_embed = ollama.embeddings(model = "mxbai-embed-large", prompt = user_input)["embedding"]
         cos_scores = torch.cosine_similarity(torch.tensor(input_embed).unsqueeze(0), vault_embed)
         top_k = min(top_k, len(cos_scores))
-        top_indices = torch.topk(cos_scores, k=top_k).tolist()
+        top_indices = torch.topk(cos_scores, k=top_k).indices.tolist()
         return [vault_content[i] for i in top_indices]
     
-    def chat(self, user_input, system_message, vault_embed, vault_content, model, conversation_history):
+    def chat(self, user_input, system_message, vault_embed, vault_content, model, conversation_history, user):
+        user_input = f"{user}: {user_input}"
+        print(user_input)
+        info = self.is_relevant(user_input)
+        print(f"relevancy_agent: {info}")
+        if _ := re.search("yes", info, re.IGNORECASE):
+            self.summarize(user_input)
         relevant_context = self.get_context(user_input, vault_embed_tensor, vault_content, 3)
         if relevant_context:
             context_str = "\n".join(relevant_context)
+            print(context_str)
         else:
             print("No context found")
-        user_input_with_context = user_input
         if relevant_context:
-            user_input_with_context = "{} \n\n {}".format(user_input, context_str)
+            user_input_with_context = "{} \n\n Remember: {}".format(user_input, context_str)
         conversation_history.append({"role": "user", "content": user_input_with_context})
         messages = [
-            {"role": "system", "content": system_message},
+            {"role": "system", "content": system_message + self.USER_ADD},
             *conversation_history
         ]
-        print(messages)
         response = ollama.chat(
             model=model,
-            messages=messages
+            messages= messages
         )
         conversation_history.append({"role": "assistant", "content": response['message']['content']})
         return response['message']['content']
+    
+    def is_relevant(self, user_input):
+        try:
+            response = self.prompt(user_input, role="user", model_name="relevancy_agent")
+            return response
+        except ollama.ResponseError as e:
+            print('Error:', e.error)
+            
+    def summarize(self, user_input):
+        try:
+            response = self.prompt(user_input, role="user", model_name="summarizer_agent")
+            print(f"summarizer_agent: {response}")
+        except ollama.ResponseError as e:
+            print('Error:', e.error)
+
+############OLLAMA###########
 
 def summoning():
     global agent
@@ -158,12 +182,33 @@ def load_vault():
 def embed_vault():
     global vault_embed, vault_embed_tensor
     for content in vault_content:
-        response = ollama.embeddings(model="xbai-embed-large", prompt=content)
-        vault_embed.append(response["embedding"])
-    vault_embed_tensor = torch.tensor(vault_embed)
+        try:
+            response = ollama.embeddings(model="mxbai-embed-large", prompt=content)
+            vault_embed.append(response["embedding"])
+        except ollama.ResponseError as e:
+            print('Error:', e.error)
+    print("embedded")
+    vault_embed_array = np.array(vault_embed)
+    print(vault_embed_array)
+    vault_embed_tensor = torch.tensor(vault_embed_array)
+    print(vault_embed_tensor)
+    return "Vault has been embedded"
 
+def to_vault(message):
+    with open("vault.txt", "a") as f:
+        f.write(f"{message}\n")
 
+def reset_vault():
+    global vault_content, vault_embed, vault_embed_tensor
+    vault_content = []
+    vault_embed = []
+    vault_embed_tensor = None
 
+def reset_history():
+    global conversation_history
+    conversation_history = []
+    response = agent.sysmsg("message is history has been reset")
+    return response
 
 
 ############DISCORD###########
@@ -178,7 +223,7 @@ summoning()
 
 @client.event
 async def on_ready():
-    ready = agent.sysmsg("message is a validation that bot is logged as" + str(client.user))
+    ready = agent.sysmsg("message is the validation that bot is logged as" + str(client.user))
     print(ready)
 
     
@@ -188,12 +233,22 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if message.content.startswith('/chat'):
-        await message.channel.send(agent.chat(message.content[5:], system_message, vault_embed_tensor, vault_content, "llama3", conversation_history))
+    mentions = message.mentions
+    user_id = message.author.id
+    mention = f"<@{user_id}>"
+
+    if client.user in mentions:
+        mention_pattern = r'<@(\d+)>'
+        message_content = message.content  
+        clean_message = re.sub(mention_pattern, '', message_content)
+        print(clean_message)
+        response = agent.chat(clean_message, system_message, vault_embed_tensor, vault_content, "llama3", conversation_history, message.author)
+        await message.channel.send(response)
+        return
 
     if message.content.startswith('/help'):
         await message.channel.send('''
-            /chat : pour parler avec llama3
+            Pour parler avec llama3, mentionnez le bot
 /help : Affiche cette page
 /about : Information à propos du bot
         ''')
@@ -208,10 +263,21 @@ async def on_message(message):
     if message.content.startswith('/test_greeting'):
         await message.channel.send(agent.greeting(message.author.name))
         return
-            
+    
+    if message.content.startswith('/rag') and message.author.guild_permissions.administrator:
+        reset_vault()
+        load_vault()
+        response = agent.sysmsg(embed_vault())
+        await message.channel.send(response)
+        return
+    
+    if message.content.startswith('/reset') and message.author.guild_permissions.administrator:
+        response = reset_history()
+        await message.channel.send(response)
+
     else:
         if agent.inspect(message.content) == "harmful":
-            alert = f'`{message.author} a dis {message.content}`'
+            alert = f'{mention} a dis {message.content}'
             user = get_user_id(message.author)
             if flagged(user) is True:
                 previous_messages = get_messages(message.author)
