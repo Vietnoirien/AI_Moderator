@@ -15,6 +15,9 @@ import aiohttp
 from functools import wraps
 import torch
 import numpy as np
+from duckduckgo_search import DDGS
+
+
 
 flask_thread = None
 bot_thread = None
@@ -33,7 +36,9 @@ system_message = "You are a helpful assistant that is an expert at extracting th
 
 load_dotenv()
 
-
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:84.0) Gecko/20100101 Firefox/84.0",
+}
 
 ############OLLAMA###########
 class Agent:
@@ -169,6 +174,17 @@ def summoning():
     msg = agent.sysmsg("message is Agent has been summoned")
     return msg
 
+############OTHERS#############
+
+def search_result(query):
+    response = ""
+    result = []
+    results = DDGS().text(query, max_results=5)
+    for r in results:
+        result.append(f"{r['href']}\n")
+    for i in range(len(result)):
+        response += f"{i+1}. {result[i]}"
+    return response
 
 ############RAG###############
 
@@ -271,9 +287,26 @@ async def on_message(message):
         await message.channel.send(response)
         return
     
+    if message.content.startswith('/rag') and not message.author.guild_permissions.administrator:
+        response = agent.sysmsg("message is you don't have permission to use this command")
+        await message.channel.send(response)
+        return
+    
     if message.content.startswith('/reset') and message.author.guild_permissions.administrator:
         response = reset_history()
         await message.channel.send(response)
+        return
+    
+    if message.content.startswith('/reset') and not message.author.guild_permissions.administrator:
+        response = agent.sysmsg("message is you don't have permission to reset history")
+        await message.channel.send(response)
+        return
+    
+    if message.content.startswith('/search '):
+        query = message.content[8:]
+        response = search_result(query)
+        await message.channel.send(response)
+        return
 
     else:
         if agent.inspect(message.content) == "harmful":
