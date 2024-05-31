@@ -130,8 +130,6 @@ class Agent:
         print(user_input)
         info = self.is_relevant(user_input)
         print(f"relevancy_agent: {info}")
-        if _ := re.search("yes", info, re.IGNORECASE):
-            self.summarize(user_input)
         relevant_context = self.get_context(user_input, vault_embed_tensor, vault_content, 3)
         if relevant_context:
             context_str = "\n".join(relevant_context)
@@ -150,7 +148,11 @@ class Agent:
             messages= messages
         )
         conversation_history.append({"role": "assistant", "content": response['message']['content']})
-        return response['message']['content']
+        if _ := re.search("yes", info, re.IGNORECASE):
+            memory = self.summarize(user_input)
+        else:
+            memory = None
+        return response['message']['content'], memory
     
     def is_relevant(self, user_input):
         try:
@@ -163,6 +165,7 @@ class Agent:
         try:
             response = self.prompt(user_input, role="user", model_name="summarizer_agent")
             print(f"summarizer_agent: {response}")
+            return response
         except ollama.ResponseError as e:
             print('Error:', e.error)
 
@@ -188,6 +191,12 @@ def search_result(query):
 
 ############RAG###############
 
+async def message_to_vault(message):
+    reset_vault()
+    to_vault(message)
+    load_vault()
+    embed_vault()
+    return print(agent.sysmsg("Vault updated"))
 
 def load_vault():
     global vault_content
@@ -211,7 +220,7 @@ def embed_vault():
     return "Vault has been embedded"
 
 def to_vault(message):
-    with open("vault.txt", "a") as f:
+    with open("vault.txt", "a", encoding = 'utf-8') as f:
         f.write(f"{message}\n")
 
 def reset_vault():
@@ -258,8 +267,10 @@ async def on_message(message):
         message_content = message.content  
         clean_message = re.sub(mention_pattern, '', message_content)
         print(clean_message)
-        response = agent.chat(clean_message, system_message, vault_embed_tensor, vault_content, "llama3", conversation_history, message.author)
+        response, memory = agent.chat(clean_message, system_message, vault_embed_tensor, vault_content, "llama3", conversation_history, message.author)
         await message.channel.send(response)
+        if memory:
+            await message_to_vault(memory)
         return
 
     if message.content.startswith('/help'):

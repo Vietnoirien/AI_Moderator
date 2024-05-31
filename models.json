@@ -25,6 +25,6 @@
   },
   "summarizer_agent": {
     "model": "summarizer",
-    "sysprompt": "FROM llama3\r\nSYSTEM You are a helpful assistant that is an expert at extracting the most useful information from a given text. You are on a discord server and have messages on the format 'user': 'message'. You say a short sentence to associate the user with the info in the message. you don't make joke."
+    "sysprompt": "FROM llama3\r\nSYSTEM You are a Remembering agent, your task is to understand the message in the format 'username': 'message' to associate the username and the idea in the message. You have to output a sentence to memorize the user and the message idea. Be clear and concise. you are an essential part of the system memory, Never answer question, never give advice. Don't misspell or translate username. Your ONLY task is to make a short sentence to memorize."
   }
 }
