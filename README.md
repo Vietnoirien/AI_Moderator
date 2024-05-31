@@ -5,7 +5,7 @@ This project is a Python application that combines a Discord bot with a Flask we
 ## Features
 
 - **Discord bot for moderating user messages**
-- **AI-powered content inspection and moderation**
+- **LLAMA3-powered content inspection and moderation**
 - **Customizable moderation rules and sanctions**
 - **SQLite database for storing user messages, moderations, and sanctions**
 - **Flask web application for managing and displaying moderated content**
