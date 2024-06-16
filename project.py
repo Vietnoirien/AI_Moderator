@@ -18,7 +18,6 @@ import numpy as np
 from duckduckgo_search import DDGS
 
 
-
 flask_thread = None
 bot_thread = None
 running_bot = None
@@ -32,7 +31,7 @@ vault_embed = []
 vault_embed_tensor = None
 
 conversation_history = []
-system_message = "You are a helpful assistant that is an expert at extracting the most useful information from a given text. You are on a discord server and have messages on the format 'user': 'message'"
+system_message = "You are a helpful assistant. You are on a discord server and have messages on the format: ('Current': <user>: <message> 'Memory':<strings>). 'Memory':<string> Is what you know about <user>. YOUR TASK is to answer to 'Current' <message> as a helpful assistant. "
 
 load_dotenv()
 
@@ -42,22 +41,33 @@ HEADERS = {
 
 ############OLLAMA###########
 class Agent:
+
     USER_ADD="reply in french"
     sys_models = ["system_msg", "relevancy_agent"]
-    
+    is_mxbai = False
+
     def __init__(self):
+
         with open('models.json', 'r') as f:
             models = json.load(f)
         self.model_names = {}
         installed = ollama.list()
-        for model in installed['models']:
-            if model['name'] == 'mxbai-embed-large:latest':
-                print("found mxbai")
-            else:
-                ollama.pull('mxbai-embed-large:latest')
+
+        if self.is_mxbai == False:
+            for model in installed['models']:
+                if model['name'] == 'mxbai-embed-large:latest':
+                    self.is_mxbai = True
+                    print("found mxbai")
+
+        if self.is_mxbai == False:
+            print("Downloading mxbai. Please wait.")
+            ollama.pull('mxbai-embed-large:latest')
+            print("Downloaded mxbai")
+
         reset_vault()
         load_vault()
         embed_vault()
+        
         for model_name, model_data in models.items():
             name = str(model_data['model'])
             prompt = str(model_data['sysprompt'])
@@ -137,7 +147,9 @@ class Agent:
         else:
             print("No context found")
         if relevant_context:
-            user_input_with_context = "{} \n\n Remember: {}".format(user_input, context_str)
+            user_input_with_context = "Current: {} \n\n Memory: {}".format(user_input, context_str)
+        else:
+            user_input_with_context = "Current: {}".format(user_input)
         conversation_history.append({"role": "user", "content": user_input_with_context})
         messages = [
             {"role": "system", "content": system_message + self.USER_ADD},

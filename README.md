@@ -1,22 +1,43 @@
-# AI Moderator: Your Discord Moderation AI
+# AI Moderator: Your Discord Server's Guardian Angel
 
-This project is a Python application that combines a Discord bot with a Flask web application and an SQLite database. The Discord bot is designed to moderate user messages, inspect their content for harmful or inappropriate language, and propose appropriate sanctions based on the severity of the message. The Flask app provides a web interface to manage and display the moderated messages, moderations, and sanctions stored in the database.
+Welcome to AI Moderator, an innovative solution designed to keep your Discord server environment safe, respectful, and engaging. This project combines the power of natural language processing with a user-friendly interface to provide comprehensive moderation services tailored to your community's needs.
 
 ## Features
 
-- **Discord bot for moderating user messages**
-- **LLAMA3-powered content inspection and moderation**
-- **Customizable moderation rules and sanctions**
-- **SQLite database for storing user messages, moderations, and sanctions**
-- **Flask web application for managing and displaying moderated content**
-- **User interface for viewing moderated messages, moderations, and sanctions**
+- **Intelligent Moderation**: Utilizing advanced NLP models, AI Moderator can understand context and sentiment within conversations for precise intervention.
+
+- **Real-Time Analysis**: Messages are analyzed on the fly to detect inappropriate content or behavior, ensuring a healthy server environment.
+
+- **Customizable Interventions**: Tailor moderation responses to align with your community's culture and guidelines for consistent communication.
+
+- **Engaging Conversations**: Beyond moderation, AI Moderator can interact with users, providing information or entertainment as needed.
+
+- **Future-Proof Design**: Built on the Ollama API framework, our bot stays up-to-date with the latest advancements in language models for continuous improvement.
+
+- **Privacy and Security**: We prioritize user privacy, adhering to strict guidelines and Discord's terms of service while handling data responsibly.
+
+## How AI Moderator Enhances Your Server
+
+AI Moderator is more than just a bot, it's an essential tool that adapts to your server's unique dynamics. Here's how:
+
+- **Contextual Understanding**: By maintaining conversation history, the bot can make informed decisions based on the context of interactions rather than isolated messages.
+
+- **Sentiment Analysis for Harmony**: Detecting shifts in tone and mood helps prevent conflicts or harassment by intervening at the right moments with appropriate responses.
+
+- **Scalable Moderation**: As your server grows, AI Moderator scales accordingly, ensuring that moderation remains effective without compromising performance.
+
+- **Seamless Integration**: Easily integrate additional features or services to enhance functionality and provide a more comprehensive experience for your community members.
 
 ## Requirements
 
-- Python 3.x
-- Discord.py library
+- discord.py
 - Flask
-- SQLite3
+- python-dotenv
+- psutil
+- ollama
+- torch
+- numpy
+- duckduckgo_search
 
 ## Installation
 
@@ -31,6 +52,9 @@ This project is a Python application that combines a Discord bot with a Flask we
     ```
 
 3. **Set up the DISCORD_TOKEN and other environment variables in a `.env` file.**
+    ```bash
+    DISCORD_TOKEN=<your token>
+    ```
 
 4. **Initialize the SQLite database by running the `init_db` script.**
    ```bash
@@ -39,7 +63,7 @@ This project is a Python application that combines a Discord bot with a Flask we
 
 ## Usage
 
-1. **Start the Flask application:**
+1. **Start the application:**
     ```bash
     python project.py
     ```
@@ -47,15 +71,21 @@ This project is a Python application that combines a Discord bot with a Flask we
 2. **Access the web interface at [http://localhost:5000](http://localhost:5000).**
 
 3. **From the web interface, you can:**
-    - Start the Discord bot
-    - View moderated messages, moderations, and sanctions
-    - Manage the application
+    - View moderated users.
 
-4. **On the Discord server, users can interact with the bot using various commands (e.g., `/chat`, `/help`, `/about`).**
+    - View moderated user's messages, moderations, and sanctions.
+
+    - User's analysis using a "psychotherapist_agent".
+
+    - Manage AI models
+
+4. **On the Discord server, users can interact with the bot by mentioning it or using various commands (e.g., `/search`, `/help`, `/about`).**
 
 5. **The bot will automatically moderate user messages, inspect their content, and propose sanctions if necessary.**
 
-6. **Moderated messages, moderations, and sanctions will be stored in the SQLite database and displayed in the web interface.**
+6. **Moderated user's messages, moderations, and sanctions will be stored in the SQLite database and displayed in the flask API.**
+
+
 
 ## Contributing
 
