@@ -51,7 +51,11 @@ class Agent:
         with open('models.json', 'r') as f:
             models = json.load(f)
         self.model_names = {}
-        installed = ollama.list()
+        try:
+            installed = ollama.list()
+        except ollama.RequestError as e:
+            print('Error', e.error)
+            sys.exit(1)
 
         if self.is_mxbai == False:
             for model in installed['models']:
