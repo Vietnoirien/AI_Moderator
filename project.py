@@ -250,13 +250,12 @@ def reset_history():
 
 ############DISCORD###########
 TOKEN = os.getenv("DISCORD_TOKEN")
-
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 client = discord.Client(intents=intents)
-summoning()
 
+summoning()
 
 @client.event
 async def on_ready():

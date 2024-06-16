@@ -41,14 +41,17 @@ To begin using AI Moderator, follow these simple steps:
 
 ## Requirements 📋
 
-- discord.py
-- Flask
-- python-dotenv
-- psutil
-- ollama
-- torch
-- numpy
-- duckduckgo_search
+- ollama installed on your local machine https://ollama.com/download.
+
+- llama3:8b 
+```bash
+ollama pull llama3
+```
+
+- A graphic card with 8Go of VRAM (6Go should work, CPU may be to slow)
+
+- 4Go RAM
+- Python 3.10+
 
 ## Installation 🛠️
 
