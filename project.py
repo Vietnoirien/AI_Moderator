@@ -259,8 +259,6 @@ intents.message_content = True
 intents.members = True
 client = discord.Client(intents=intents)
 
-summoning()
-
 @client.event
 async def on_ready():
     ready = agent.sysmsg("message is the validation that bot is logged as" + str(client.user))
@@ -572,6 +570,7 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == "__main__":
+    summoning()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(create_session())
