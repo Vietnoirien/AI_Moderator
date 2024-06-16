@@ -1,6 +1,0 @@
-{
-    "python.analysis.autoImportCompletions": true,
-    "cody.telemetry.level": "off",
-    "cody.internal.unstable": true,
-    "cody.autocomplete.advanced.provider": "experimental-ollama"
-}
